@@ -1,0 +1,156 @@
+apiVersion: v1
+kind: Template
+metadata:
+  name: sdgesi-boot-pipeline-template
+  annotations:
+    description: SDGESI Spring Boot Jenkins Pipeline integration in OpenShift.
+      Creates continuous integration and deployment pipeline.
+      The template references a Jenkins pipeline definition in Git of a 
+      multi-stage CI/CD process - that leverages the underlying OpenShift platform 
+      for dynamic and scalable builds. 
+    iconClass: icon-rh-integration
+    openshift.io/display-name: SDGESI Jenkins Pipeline - Spring Boot
+    openshift.io/provider-display-name: SDGESI
+    tags: quickstart,java,springboot,fis,jboss-fuse,jenkins
+  labels:
+    template: sdgesi-boot-pipeline-template
+objects:
+- apiVersion: image.openshift.io/v1
+  kind: ImageStream
+  metadata:
+    labels:
+      build: ${NAME}
+    name: ${NAME}
+  spec:
+    lookupPolicy:
+      local: false
+- apiVersion: build.openshift.io/v1
+  kind: BuildConfig
+  metadata:
+    labels:
+      build: ${NAME}
+    name: ${NAME}
+  spec:
+    nodeSelector: null
+    output:
+      to:
+        kind: ImageStreamTag
+        name: ${NAME}:latest
+    postCommit: {}
+    resources: {}
+    source:
+      binary: {}
+      type: Binary
+    strategy:
+      sourceStrategy:
+        from:
+          kind: ImageStreamTag
+          name: ${BUILDER_IMAGE_TAG}
+          namespace: ${IMAGE_NAMESPACE}
+      type: Source
+- apiVersion: build.openshift.io/v1
+  kind: BuildConfig
+  metadata:
+    labels:
+      build: ${NAME}
+    name: ${NAME}-pipeline
+  spec:
+    nodeSelector: null
+    output: {}
+    postCommit: {}
+    resources: {}
+    source:
+      contextDir: ${JENKINS_CONTEXT_DIR}
+      git:
+        ref: ${JENKINS_REPO_REF}
+        uri: ${JENKINS_REPO_URL}
+      sourceSecret:
+        name: ${JENKINS_SOURCE_SECRET}
+      type: Git
+    strategy:
+      jenkinsPipelineStrategy:
+        env:
+          - name: NAME
+            value: ${NAME}
+          - name: SOURCE_REPO
+            value: ${SOURCE_REPO_URL}
+          - name: SOURCE_REF
+            value: ${SOURCE_REPO_REF}
+          - name: CONTEXT_DIR
+            value: ${CONTEXT_DIR}
+          - name: SOURCE_SECRET
+            value: ${SOURCE_SECRET}
+      type: JenkinsPipeline
+    triggers:
+      - github:
+          secret: ${GITHUB_WEBHOOK_SECRET}
+        type: GitHub
+      - generic:
+          secret: ${GENERIC_WEBHOOK_SECRET}
+        type: Generic
+      - type: ConfigChange
+parameters:
+  - name: NAME
+    description: The name assigned to all of the objects defined in this template.
+    displayName: Application Name
+    required: true
+  - name: SOURCE_REPO_URL
+    description: The URL of the repository with your application source code.
+    displayName: Git Repository URL
+    required: true
+    value: ssh://git@github.com/lgirton/booster.git
+  - name: SOURCE_REPO_REF
+    description: Set this to a branch name, tag or other ref of your repository if you
+      are not using the default branch.
+    displayName: Git Reference
+    value: master
+  - name: SOURCE_SECRET
+    description: The name of the secret used to access the application source repository
+    displayName: Application source secret
+    value: github
+  - name: BUILDER_IMAGE_TAG
+    description: The name of the source image builder image that will be used to build the docker image,
+      as well as be the base image for the container
+    displayName: Builder image
+    value: fuse7-java-openshift:1.2
+  - name: IMAGE_NAMESPACE
+    description: The namespace of the source image builder image that will be used to build the docker image,
+      as well as be the base image for the container
+    displayName: Builder image namespace
+    value: openshift
+  - name: CONTEXT_DIR
+    description: Set this to the relative path to your project if it is not in the root
+      of your repository.
+    displayName: Context Directory
+  - name: JENKINS_REPO_URL
+    description: The URL of the repository with your Jenkinsfile.
+    displayName: Jenkins Git Repository URL
+    required: true
+    value: ssh://git@github.com/lgirton/ci.git
+  - name: JENKINS_REPO_REF
+    description: Set this to a branch name, tag or other ref of your repository with the Jenkinsfile if you
+      are not using the default branch.
+    displayName: Git Reference
+    value: master
+  - name: JENKINS_CONTEXT_DIR
+    description: Set this to the relative path to your project if it is not in the root
+        of your repository.
+    displayName: Context Directory
+    value: .
+  - name: JENKINS_SOURCE_SECRET
+    description: The name of the secret used to access the Jenkinsfile source repository
+    displayName: Application source secret
+    value: github
+  - name: GITHUB_WEBHOOK_SECRET
+    description: Github trigger secret.  A difficult to guess string encoded as part
+      of the webhook URL.  Not encrypted.
+    displayName: GitHub Webhook Secret
+    from: '[a-zA-Z0-9]{40}'
+    generate: expression
+  - name: GENERIC_WEBHOOK_SECRET
+    description: A secret string used to configure the Generic webhook.
+    displayName: Generic Webhook Secret
+    from: '[a-zA-Z0-9]{40}'
+    generate: expression
+
+
